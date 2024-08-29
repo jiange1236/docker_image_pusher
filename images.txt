@@ -1,10 +1,10 @@
---platform=linux/arm/v7 whyour/qinglong
---platform=linux/arm/v7 natpierce/natpierce:arm32
---platform=linux/arm/v7 gdy666/lucky
---platform=linux/arm/v7 xhofe/alist
---platform=linux/arm/v7 soulteary/flare
---platform=linux/arm/v7 containrrr/watchtower
---platform=linux/arm/v7 homeassistant/armv7-homeassistant
+--platform=linux/armv7 whyour/qinglong
+--platform=linux/armv7 natpierce/natpierce:arm32
+--platform=linux/armv7 gdy666/lucky
+--platform=linux/armv7 xhofe/alist
+--platform=linux/armv7 soulteary/flare
+--platform=linux/armv7 containrrr/watchtower
+--platform=linux/armv7 homeassistant/armv7-homeassistant
 
 
 #支持私库
