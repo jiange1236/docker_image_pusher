@@ -1,6 +1,14 @@
-nginx
+--platform=linux/arm/v7 whyour/qinglong
+--platform=linux/arm/v7 natpierce/natpierce:arm32
+--platform=linux/arm/v7 gdy666/lucky
+--platform=linux/arm/v7 xhofe/alist
+--platform=linux/arm/v7 soulteary/flare
+--platform=linux/arm/v7 containrrr/watchtower
+--platform=linux/arm/v7 homeassistant/armv7-homeassistant
+
+
 #支持私库
-k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0
-xhofe/alist:latest
+#k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0
+#xhofe/alist:latest
 #支持指定架构
---platform=linux/arm64 xiaoyaliu/alist
+#--platform=linux/arm64 xiaoyaliu/alist
