@@ -25,7 +25,6 @@ jobs:
         df -hT
         echo "=============================================================================="
 
-    # 增加可用磁盘空间（imagetools几乎不占磁盘，可注释掉这一段）
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
@@ -53,30 +52,25 @@ jobs:
 
     - name: Build and push image Aliyun
       run: |
+        set +e
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
         # 数据预处理,判断镜像是否重名
         declare -A duplicate_images
         declare -A temp_map
         while IFS= read -r line || [ -n "$line" ]; do
-            # 忽略空行与注释
             [[ -z "$line" ]] && continue
             if echo "$line" | grep -q '^\s*#'; then
                 continue
             fi
             
-            # 获取镜像的完整名称
             image=$(echo "$line" | awk '{print $NF}')
-            # 将@sha256:等字符删除
             image="${image%%@*}"
             echo "image $image"
-            # 获取镜像名:版本号
             image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
             echo "image_name_tag $image_name_tag"
-            # 获取命名空间
             name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
             echo "name_space: $name_space"
             name_space="${name_space}_"
-            # 获取镜像名
             image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
             echo "image_name: $image_name"
             
@@ -92,7 +86,6 @@ jobs:
         
         
         while IFS= read -r line || [ -n "$line" ]; do
-            # 忽略空行与注释
             [[ -z "$line" ]] && continue
             if echo "$line" | grep -q '^\s*#'; then
                 continue
@@ -107,7 +100,6 @@ jobs:
                 platform_prefix="${platform//\//_}_"
             fi
             echo "platform_prefix is $platform_prefix"
-            # 获取源镜像
             image=$(echo "$line" | awk '{print $NF}')
             image="${image%%@*}"
 
@@ -126,14 +118,40 @@ jobs:
             new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$platform_prefix$name_space_prefix$image_name_tag"
             echo ">>> Target: $new_image"
 
-            # =========核心改动：使用 imagetools create 代替 pull/tag/push =========
-            if [ -z "$platform" ]; then
-              # 不指定架构：复制完整多架构manifest（一个tag包含全部架构）
-              docker buildx imagetools create -t "$new_image" "$image"
-            else
-              # 指定架构：只挑选该架构，生成纯净单架构manifest（解决Unavailable）
-              docker buildx imagetools create --platform "$platform" -t "$new_image" "$image"
+            # 1. pull
+            echo "docker pull $line"
+            docker pull $line
+            pull_ret=$?
+            if [ $pull_ret -ne 0 ];then
+              echo "❌ pull failed: $line"
+              continue
             fi
-            echo "✅ Push finish: $new_image"
+
+            # 【核心清洗步骤】save + load，剥离多余OCI manifest引用，解决Unavailable + oci.empty.v1+json报错
+            echo "=== clean manifest via save|load ==="
+            docker save "$image" | docker load
+            clean_ret=$?
+            if [ $clean_ret -ne 0 ];then
+              echo "❌ save|load clean failed $image"
+              docker rmi "$image"
+              continue
+            fi
+
+            echo "docker tag $image $new_image"
+            docker tag "$image" "$new_image"
+            echo "docker push $new_image"
+            docker push "$new_image"
+            push_ret=$?
+            if [ $push_ret -ne 0 ];then
+              echo "❌ push failed $new_image"
+            else
+              echo "✅ push success $new_image"
+            fi
+
+            # 清理
+            docker rmi "$image" || true
+            docker rmi "$new_image" || true
+            echo "=============================================================================="
+            df -hT
             echo "=============================================================================="
         done < images.txt
