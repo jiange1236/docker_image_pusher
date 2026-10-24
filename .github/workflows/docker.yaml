@@ -25,6 +25,19 @@ jobs:
         df -hT
         echo "=============================================================================="
 
+    - name: Disable containerd snapshotter
+      run: |
+        DAEMON_JSON="/etc/docker/daemon.json"
+        if [ -f "$DAEMON_JSON" ]; then
+          sudo jq '. + {"features": {"containerd-snapshotter": false}}' "$DAEMON_JSON" \
+            | sudo tee "${DAEMON_JSON}.tmp" > /dev/null
+          sudo mv "${DAEMON_JSON}.tmp" "$DAEMON_JSON"
+        else
+          echo '{"features": {"containerd-snapshotter": false}}' \
+            | sudo tee "$DAEMON_JSON" > /dev/null
+        fi
+        sudo systemctl restart docker
+
 # 1. 先执行磁盘空间扩展
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
