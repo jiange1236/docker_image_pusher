@@ -25,27 +25,24 @@ jobs:
         df -hT
         echo "=============================================================================="
 
-    # 增加可用磁盘空间
+# 1. 先执行磁盘空间扩展
     - name: Maximize build space
-      uses: smallprogram/maximize-build-space@master
+      uses: easimon/maximize-build-space@master
       with:
-
         root-reserve-mb: 2048
         swap-size-mb: 128
         remove-dotnet: 'true'
         remove-haskell: 'true'
-        # 如果空间还是不够用，可以把以下开启，清理出更多空间
-        # remove-android: 'true'
-        # remove-codeql: 'true'
         build-mount-path: '/var/lib'
-        
-    - name: Fix containerd snapshot directories
+
+    # 2. 挂载完成后，立即创建 containerd 需要的完整目录结构
+    - name: Fix containerd directories after mount
       run: |
-        # 创建缺失的 snapshots 目录
+        # 创建缺失的 snapshots 目录及其父目录
         sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots
-        # 将 containerd 数据目录权限赋予当前用户
+        # 将所有权授予当前用户，确保 containerd 可写入
         sudo chown -R $USER:$USER /var/lib/containerd
-        # 重启 containerd 和 docker 服务，让其基于新目录结构初始化
+        # 重启 containerd 和 docker，让服务基于新目录重新初始化
         sudo systemctl restart containerd
         sudo systemctl restart docker
 
