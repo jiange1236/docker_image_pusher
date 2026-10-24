@@ -39,15 +39,15 @@ jobs:
         # remove-codeql: 'true'
         build-mount-path: '/var/lib'
         
-    - name: Fix containerd metadata permissions
+    - name: Fix containerd snapshot directories
       run: |
-        sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
+        # 创建缺失的 snapshots 目录
+        sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots
+        # 将 containerd 数据目录权限赋予当前用户
         sudo chown -R $USER:$USER /var/lib/containerd
-        # 如果 metadata.db 文件已损坏，可以删除它让 containerd 重建
-        # sudo rm -f /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/metadata.db
-        
-    - name: Restart docker
-      run: sudo service docker restart
+        # 重启 containerd 和 docker 服务，让其基于新目录结构初始化
+        sudo systemctl restart containerd
+        sudo systemctl restart docker
 
     - name: Free up disk space complete
       run: |
