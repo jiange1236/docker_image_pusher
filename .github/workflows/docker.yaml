@@ -38,7 +38,14 @@ jobs:
         # remove-android: 'true'
         # remove-codeql: 'true'
         build-mount-path: '/var/lib'
-
+        
+    - name: Fix containerd metadata permissions
+      run: |
+        sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
+        sudo chown -R $USER:$USER /var/lib/containerd
+        # 如果 metadata.db 文件已损坏，可以删除它让 containerd 重建
+        # sudo rm -f /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/metadata.db
+        
     - name: Restart docker
       run: sudo service docker restart
 
