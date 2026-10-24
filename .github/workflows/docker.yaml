@@ -25,39 +25,40 @@ jobs:
         df -hT
         echo "=============================================================================="
 
-    - name: Disable containerd snapshotter
-      run: |
-        DAEMON_JSON="/etc/docker/daemon.json"
-        if [ -f "$DAEMON_JSON" ]; then
-          sudo jq '. + {"features": {"containerd-snapshotter": false}}' "$DAEMON_JSON" \
-            | sudo tee "${DAEMON_JSON}.tmp" > /dev/null
-          sudo mv "${DAEMON_JSON}.tmp" "$DAEMON_JSON"
-        else
-          echo '{"features": {"containerd-snapshotter": false}}' \
-            | sudo tee "$DAEMON_JSON" > /dev/null
-        fi
-        sudo systemctl restart docker
-
-# 1. 先执行磁盘空间扩展
+    # 增加可用磁盘空间
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
-        root-reserve-mb: 2048
+
+        root-reserve-mb: 4096
         swap-size-mb: 128
         remove-dotnet: 'true'
         remove-haskell: 'true'
-        build-mount-path: '/var/lib'
+        # 如果空间还是不够用，可以把以下开启，清理出更多空间
+        # remove-android: 'true'
+        # remove-codeql: 'true'
+        build-mount-path: '/var/lib/docker/'
 
-    # 2. 挂载完成后，立即创建 containerd 需要的完整目录结构
-    - name: Fix containerd directories after mount
+    # ★ 关键修复：新版 runner 的 Docker 29 默认启用 containerd 镜像存储，
+    # 镜像数据写入系统盘的 /var/lib/containerd，而不是 /var/lib/docker（大盘）。
+    # 系统盘只留了几个 G，拉取镜像会把系统盘写爆（no space left on device）。
+    # 所以必须把 containerd 数据目录搬到大盘：停服务 -> 删旧缓存 -> 软链到大盘 -> 重启。
+    - name: Move containerd data to build mount and restart docker
       run: |
-        # 创建缺失的 snapshots 目录及其父目录
-        sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots
-        # 将所有权授予当前用户，确保 containerd 可写入
-        sudo chown -R $USER:$USER /var/lib/containerd
-        # 重启 containerd 和 docker，让服务基于新目录重新初始化
-        sudo systemctl restart containerd
-        sudo systemctl restart docker
+        echo "=============================================================================="
+        sudo systemctl stop docker docker.socket containerd || true
+        # 旧目录里只有 runner 预装的镜像缓存，可以放心清掉
+        sudo rm -rf /var/lib/containerd
+        # 在大盘（build-mount-path）上新建 containerd 数据目录并做软链接
+        sudo mkdir -p /var/lib/docker/containerd-data
+        sudo ln -sfn /var/lib/docker/containerd-data /var/lib/containerd
+        sudo systemctl start containerd
+        sudo systemctl start docker
+        echo "containerd data dir is now on the big build mount:"
+        ls -lh /var/lib/containerd
+        echo "=============================================================================="
+        df -hT /var/lib/containerd/ /var/lib/docker/
+        echo "=============================================================================="
 
     - name: Free up disk space complete
       run: |
@@ -69,12 +70,14 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Docker Setup Buildx
-      uses: docker/setup-buildx-action@v3
+    # ★ 已删除 "Docker Setup Buildx" 步骤：
+    # 本 workflow 只做 docker pull / tag / push，docker pull 原生支持 --platform，
+    # 完全用不到 buildx。正是这一步启动 builder 时拉取 moby/buildkit 镜像，
+    # 写爆了系统盘上的 /var/lib/containerd。
 
     - name: Build and push image Aliyun
       run: |
-        docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
+        printf '%s' "$ALIYUN_REGISTRY_PASSWORD" | docker login -u "$ALIYUN_REGISTRY_USER" --password-stdin "$ALIYUN_REGISTRY"
         # 数据预处理,判断镜像是否重名
         declare -A duplicate_images
         declare -A temp_map
